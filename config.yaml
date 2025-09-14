@@ -1,0 +1,80 @@
+# TSGW Configuration File
+# This file contains the routing configuration for the Tailscale Gateway
+
+# Tailscale hostname for this node
+hostname: "tsgw"
+
+# Tailscale network domain (e.g., "example.com")
+# Route names will be concatenated with this domain to form FQDNs
+tailscale_domain: "example.ts.net"
+
+# Directory for Tailscale machine files (default: "./tsnet")
+# Each route will create its own subdirectory within this base directory
+# Can also be set via TSGW_TSNET_DIR environment variable or --tsnet-dir flag
+tsnet_dir: "./tsnet"
+
+# Port to listen on (default: 443)
+port: 443
+
+# Log level: trace, debug, info, warn, error, fatal, panic (default: info)
+# Can also be set via TSGW_LOG_LEVEL environment variable
+log_level: "debug"
+
+# Log format: json, text/console (default: console)
+# Can also be set via TSGW_LOG_FORMAT environment variable or --log-format flag
+log_format: "console"
+
+# Skip TLS certificate verification for HTTPS backends (default: false)
+# Useful for development or when backends have self-signed certificates
+skip_tls_verify: true
+
+# Optional: Listen on regular network interface in addition to Tailscale
+# Examples: ":8080", "0.0.0.0:8080", "localhost:8080"
+# Leave empty to only listen on Tailscale network
+listen_address: ":8080"
+
+# OpenTelemetry configuration for tracing and metrics (optional)
+# Enable OpenTelemetry to send traces and metrics to an OTLP collector
+opentelemetry:
+  # Enable OpenTelemetry tracing and metrics (default: false)
+  # Can also be set via TSGW_OTEL_ENABLED environment variable or --otel-enabled flag
+  enabled: false
+
+  # Service name for OpenTelemetry (default: "tsgw")
+  # Can also be set via TSGW_OTEL_SERVICE_NAME environment variable or --otel-service-name flag
+  service_name: "tsgw"
+
+  # OTLP endpoint URL (required if enabled)
+  # Examples: "localhost:4317", "otel-collector:4317", "https://api.honeycomb.io:443"
+  # Can also be set via TSGW_OTEL_ENDPOINT environment variable or --otel-endpoint flag
+  endpoint: ""
+
+  # OTLP protocol: "grpc" or "http" (default: "grpc")
+  # Can also be set via TSGW_OTEL_PROTOCOL environment variable or --otel-protocol flag
+  protocol: "grpc"
+
+  # Skip TLS verification for OTLP endpoint (default: false)
+  # Useful for development with self-signed certificates
+  # Can also be set via TSGW_OTEL_INSECURE environment variable or --otel-insecure flag
+  insecure: false
+
+  # Additional headers to send with OTLP requests (optional)
+  # Useful for authentication with OTLP collectors
+  headers: {}
+  # Example:
+  # headers:
+  #   "x-api-key": "your-api-key"
+  #   "authorization": "Bearer your-token"
+
+# Authentication configuration (OAuth required)
+oauth:
+  client_id: "xxxxxxxxxxxxxxxxx"
+  client_secret: "tskey-client-xxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  issuer: "https://login.tailscale.com"  # Optional, defaults to Tailscale
+
+# Routing configuration: name -> backend URL mappings
+# Names will be automatically concatenated with tailscale_domain to form FQDNs
+# Auth keys are created automatically using the Tailscale API - no manual setup required!
+routes:
+  "test": "http://example.org"
+  "test2": "https://example.org"

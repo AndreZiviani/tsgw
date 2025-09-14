@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  tsgw:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tsgw
+    ports:
+      - "443:443"
+    environment:
+      # Override configuration via environment variables
+      - TSGW_LOG_LEVEL=info
+      # Add your Tailscale configuration here:
+      # - TSGW_TAILSCALE_DOMAIN=your-domain.ts.net
+      # - TSGW_OAUTH_CLIENT_ID=your-oauth-client-id
+      # - TSGW_OAUTH_CLIENT_SECRET=your-oauth-client-secret
+    volumes:
+      # Mount custom config file (optional)
+      - ./config.yaml:/app/config.yaml:ro
+      # Mount Tailscale state directories (optional - for persistence)
+      - ./tsnet-data:/app/tsnet-data
+    restart: unless-stopped
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:443/", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
