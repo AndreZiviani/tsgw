@@ -39,5 +39,5 @@ Thumbs.db
 *.tmp
 *.temp
 
-tsnet-*
+tsnet/
 creds

@@ -26,7 +26,6 @@ type OpenTelemetry struct {
 	MeterProvider  metric.MeterProvider
 	Tracer         oteltrace.Tracer
 	Meter          metric.Meter
-	Metrics        *Metrics
 }
 
 // SetupOpenTelemetry initializes OpenTelemetry if enabled in configuration
@@ -38,7 +37,6 @@ func SetupOpenTelemetry(ctx context.Context, config *Config) (*OpenTelemetry, er
 			MeterProvider:  noop.NewMeterProvider(),
 			Tracer:         tracenoop.NewTracerProvider().Tracer("tsgw"),
 			Meter:          noop.NewMeterProvider().Meter("tsgw"),
-			Metrics:        nil,
 		}, nil
 	}
 
@@ -94,12 +92,6 @@ func SetupOpenTelemetry(ctx context.Context, config *Config) (*OpenTelemetry, er
 	tracer := tracerProvider.Tracer("tsgw")
 	meter := meterProvider.Meter("tsgw")
 
-	// Initialize metrics
-	metrics, err := InitMetrics(meter)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize metrics: %w", err)
-	}
-
 	log.Info().Msg("OpenTelemetry setup completed")
 
 	return &OpenTelemetry{
@@ -107,7 +99,6 @@ func SetupOpenTelemetry(ctx context.Context, config *Config) (*OpenTelemetry, er
 		MeterProvider:  meterProvider,
 		Tracer:         tracer,
 		Meter:          meter,
-		Metrics:        metrics,
 	}, nil
 }
 

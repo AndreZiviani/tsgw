@@ -14,36 +14,30 @@ A Go application that acts as an HTTPS load balancer for remote endpoints access
 
 2. **Setup OAuth Client** - Follow the detailed steps in [OAuth Setup](#oauth-setup) below
 
-3. **Configure**
-   ```yaml
-   # config.yaml
-   tailscale_domain: "your-domain.ts.net"
-   oauth:
-     client_id: "tskey-client-xxxxxxxxxxxxxx"
-     client_secret: "tskey-secret-xxxxxxxxxxxxxx"
-   routes:
-     "app": "http://app.internal:8080"
-     "api": "https://api.internal:3000"
-   ```
-
-4. **Run**
+3. **Configure and Run**
    ```bash
-   ./tsgw
+   ./tsgw \
+     --tailscale-domain "your-domain.ts.net" \
+     --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+     --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+     --route "app=http://app.internal:8080" \
+     --route "api=https://api.internal:3000"
    ```
 
-5. **Access**
+4. **Access**
    - `https://app.your-domain.ts.net` → `http://app.internal:8080`
    - `https://api.your-domain.ts.net` → `https://api.internal:3000`
 
 ## Features
 
 - **🔐 Automatic Authentication**: OAuth 2.0 with token refresh
-- **🏗️ Multi-Node Architecture**: One Tailscale node per route for isolation
+- **🏗️ Isolated Architecture**: One Tailscale node per route with dedicated Echo instance
 - **🔒 Automatic HTTPS**: Tailscale-managed certificates
 - **🎯 Host-Based Routing**: Route by Host header
+- **⚡ Optimized Proxy**: Pre-configured proxy setup (no per-request overhead)
 - **📊 Observability**: Optional OpenTelemetry support
 - **🐳 Container Ready**: Docker and Kubernetes support
-- **⚙️ Flexible Config**: CLI, env vars, and config files
+- **⚙️ CLI-First Config**: Environment variables and CLI flags only
 
 ## OAuth Setup
 
@@ -95,33 +89,88 @@ If successful, you'll see a JSON response with your tailnet's devices.
 ### Basic Configuration File
 
 ```yaml
-# config.yaml
-hostname: "tsgw"                    # Base hostname for nodes
-tailscale_domain: "example.ts.net"  # Your Tailscale domain
-port: 443                          # Listen port
-tsnet_dir: "./tsnet"               # ⚠️ MUST BE PERSISTENT
+## Configuration
 
-# OAuth (required)
-oauth:
-  client_id: "tskey-client-xxxxxxxxxxxxxx"
-  client_secret: "tskey-secret-xxxxxxxxxxxxxx"
+TSGW uses a CLI-first configuration approach with environment variable support. No config files are supported.
 
-# Routes (required)
-routes:
-  "app1": "http://app1.internal:8080"
-  "api": "https://api.internal:3000"
-  "web": "http://web.internal:8080"
+### Required Configuration
 
-# Optional features
-log_level: "info"        # trace, debug, info, warn, error
-log_format: "console"    # console or json
-skip_tls_verify: false   # Skip backend TLS verification
+```bash
+# Required: Tailscale domain
+--tailscale-domain "your-domain.ts.net" \
+# Required: OAuth credentials
+--oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+--oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+# Required: At least one route
+--route "app=http://app.internal:8080"
+```
+
+### Environment Variables
+
+```bash
+# Required
+export TSGW_TAILSCALE_DOMAIN="your-domain.ts.net"
+export TSGW_OAUTH_CLIENT_ID="tskey-client-xxxxxxxxxxxxxx"
+export TSGW_OAUTH_CLIENT_SECRET="tskey-secret-xxxxxxxxxxxxxx"
+
+# Routes - Option 1: Single environment variable with space-separated routes
+export TSGW_ROUTES="app=http://app.internal:8080 api=https://api.internal:3000 web=http://web.internal:8080"
+
+# Routes - Option 2: Individual environment variables (overrides TSGW_ROUTES if both are set)
+export TSGW_ROUTE_APP="http://app.internal:8080"
+export TSGW_ROUTE_API="https://api.internal:3000"
+export TSGW_ROUTE_WEB="http://web.internal:8080"
+
+# Optional
+export TSGW_HOSTNAME="tsgw"                    # Base hostname for nodes
+export TSGW_PORT=443                          # Listen port
+export TSGW_LOG_LEVEL="info"                  # trace, debug, info, warn, error
+export TSGW_LOG_FORMAT="console"              # console or json
+export TSGW_SKIP_TLS_VERIFY="false"           # Skip backend TLS verification
+export TSGW_LISTEN_ADDRESS=""                 # Optional regular network listener
+export TSGW_TSNET_DIR="./tsnet"               # Tailscale state directory
+export TSGW_FORCE_CLEANUP="false"             # Force cleanup of existing state
 
 # OpenTelemetry (optional)
-opentelemetry:
-  enabled: false
-  endpoint: "localhost:4317"
-  service_name: "tsgw"
+export TSGW_OTEL_ENABLED="false"
+export TSGW_OTEL_SERVICE_NAME="tsgw"
+export TSGW_OTEL_ENDPOINT="localhost:4317"
+export TSGW_OTEL_PROTOCOL="grpc"
+export TSGW_OTEL_INSECURE="false"
+```
+
+### CLI Flags
+
+```bash
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "app=http://app.internal:8080" \
+  --route "api=https://api.internal:3000" \
+  --route "web=http://web.internal:8080" \
+  --log-level "info" \
+  --tsnet-dir "./tsnet"
+```
+
+### Route Configuration
+
+Routes are specified in `name=backend_url` format:
+
+```bash
+# Examples
+--route "app=http://app.internal:8080"
+--route "api=https://api.internal:3000"
+--route "web=http://web.internal:8080"
+--route "secure-app=https://secure-app.internal:8443"
+```
+
+Each route creates:
+- A dedicated Tailscale node: `app.your-domain.ts.net`
+- A dedicated Echo instance for that route
+- Pre-configured proxy to the backend URL
+
+**Priority**: Environment Variables > CLI Flags
 ```
 
 ### Environment Variables
@@ -150,11 +199,12 @@ export TSGW_OTEL_ENABLED="true"
        --oauth-client-id "xxx" \
        --oauth-client-secret "xxx" \
        --tsnet-dir "/persistent/path" \
+       --force-cleanup \
        --route "app=http://app.internal:8080" \
        --route "api=https://api.internal:3000"
 ```
 
-**Priority**: Environment Variables > CLI Flags > Config File
+**Priority**: Environment Variables > CLI Flags
 
 ## Storage
 
@@ -176,11 +226,13 @@ The `tsnet_dir` contains Tailscale machine state and **MUST be persistent**. Los
 docker build -t tsgw .
 
 # Run with persistent storage
-docker run -v tsgw_data:/app/tsnet \
+docker run \
   -e TSGW_TAILSCALE_DOMAIN="your-domain.ts.net" \
-  -e TSGW_OAUTH_CLIENT_ID="xxx" \
-  -e TSGW_OAUTH_CLIENT_SECRET="xxx" \
+  -e TSGW_OAUTH_CLIENT_ID="tskey-client-xxxxxxxxxxxxxx" \
+  -e TSGW_OAUTH_CLIENT_SECRET="tskey-secret-xxxxxxxxxxxxxx" \
+  -e TSGW_ROUTES="app=http://app.internal:8080 api=https://api.internal:3000" \
   -e TSGW_TSNET_DIR="/app/tsnet" \
+  -v tsgw_data:/app/tsnet \
   tsgw
 ```
 
@@ -219,6 +271,14 @@ spec:
               key: client-secret
         - name: TSGW_TSNET_DIR
           value: "/data/tsgw"
+        # Routes - Option 1: Single env var with space-separated routes
+        - name: TSGW_ROUTES
+          value: "app=http://app.internal:8080 api=https://api.internal:3000"
+        # Routes - Option 2: Individual route env vars (alternative)
+        # - name: TSGW_ROUTE_APP
+        #   value: "http://app.internal:8080"
+        # - name: TSGW_ROUTE_API
+        #   value: "https://api.internal:3000"
         volumeMounts:
         - name: tsgw-storage
           mountPath: /data/tsgw
@@ -239,14 +299,52 @@ spec:
       storage: 1Gi
 ```
 
+### Command Line
+
+```bash
+# Basic usage
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "app=http://app.internal:8080"
+
+# With multiple routes and options
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "app=http://app.internal:8080" \
+  --route "api=https://api.internal:3000" \
+  --route "web=http://web.internal:8080" \
+  --log-level "debug" \
+  --otel-enabled \
+  --otel-endpoint "localhost:4317"
+```
+
 ## Troubleshooting
 
 ### Common Issues
 
+**Machines removed from Tailscale console but cached locally**
+```bash
+# Force cleanup of invalid state files
+./tsgw --force-cleanup --log-level debug
+
+# Or set environment variable
+export TSGW_FORCE_CLEANUP=true
+./tsgw
+```
+
 **Machines not appearing in Tailscale admin**
 ```bash
-# Check OAuth credentials
-./tsgw --log-level debug
+# Check OAuth credentials with debug logging
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "test=http://httpbin.org" \
+  --log-level "debug"
 
 # Verify API access
 curl -H "Authorization: Bearer $(tailscale auth)" \
@@ -268,23 +366,50 @@ openssl s_client -connect app.your-domain.ts.net:443
 **High memory usage**
 ```bash
 # Check for certificate rotation issues
-./tsgw --log-level debug 2>&1 | grep -i cert
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "test=http://httpbin.org" \
+  --log-level "debug" 2>&1 | grep -i cert
 
 # Monitor with observability
-./tsgw --otel-enabled --otel-endpoint localhost:4317
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "test=http://httpbin.org" \
+  --otel-enabled \
+  --otel-endpoint "localhost:4317"
 ```
 
 ### Logs
 
 ```bash
 # Enable debug logging
-export TSGW_LOG_LEVEL=debug
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "test=http://httpbin.org" \
+  --log-level "debug"
 
 # JSON format for production
-export TSGW_LOG_FORMAT=json
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "test=http://httpbin.org" \
+  --log-level "info" \
+  --log-format "json"
 
 # Check specific route
-./tsgw --log-level trace --route "test=http://httpbin.org"
+./tsgw \
+  --tailscale-domain "your-domain.ts.net" \
+  --oauth-client-id "tskey-client-xxxxxxxxxxxxxx" \
+  --oauth-client-secret "tskey-secret-xxxxxxxxxxxxxx" \
+  --route "test=http://httpbin.org" \
+  --log-level "trace"
 ```
 
 ## Requirements
