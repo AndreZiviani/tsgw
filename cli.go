@@ -22,10 +22,16 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 				Sources:  cli.EnvVars("TSGW_TAILSCALE_DOMAIN"),
 			},
 			&cli.IntFlag{
-				Name:    "port",
-				Usage:   "Port to listen on",
+				Name:    "http-port",
+				Usage:   "HTTP port to listen on, used only to redirect to HTTPS",
+				Value:   80,
+				Sources: cli.EnvVars("TSGW_HTTP_PORT"),
+			},
+			&cli.IntFlag{
+				Name:    "https-port",
+				Usage:   "HTTPS port to listen on",
 				Value:   443,
-				Sources: cli.EnvVars("TSGW_PORT"),
+				Sources: cli.EnvVars("TSGW_HTTPS_PORT"),
 			},
 
 			// OAuth configuration

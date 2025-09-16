@@ -38,7 +38,8 @@ func TestNewRouteServer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create mock dependencies
 			config := &Config{
-				Port:           443,
+				HTTPPort:       80,
+				HTTPSPort:      443,
 				SkipTLSVerify:  false,
 				RequestTimeout: 30 * time.Second,
 				OpenTelemetry: OpenTelemetryConfig{

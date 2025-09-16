@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	gommon "github.com/labstack/gommon/log"
 	"github.com/rs/zerolog/log"
 	lecho "github.com/ziflex/lecho/v3"
@@ -66,6 +67,7 @@ func (rs *RouteServer) initEcho() error {
 
 	// Set lecho as the logger for Echo
 	e.Logger = lechoLogger
+	e.Pre(middleware.HTTPSRedirect())
 	e.Use(
 		lecho.Middleware(
 			lecho.Config{
@@ -162,23 +164,30 @@ func (rp *RouteProxy) handler(c echo.Context) error {
 }
 
 func (rs *RouteServer) Start(ctx context.Context) error {
-	// Listen on tailnet with TLS for this route
-	portStr := fmt.Sprintf(":%d", rs.config.Port)
+	lnHTTP, err := rs.Server.Listen("tcp", fmt.Sprintf(":%d", rs.config.HTTPPort))
+	if err != nil {
+		log.Error().Err(err).Str("route", rs.RouteName).Msg("Failed to listen on Tailscale HTTP")
+		return fmt.Errorf("failed to listen on HTTP for route %s: %w", rs.RouteName, err)
+	}
+	defer lnHTTP.Close()
 
-	ln, err := rs.Server.ListenTLS("tcp", portStr)
+	lnHTTPS, err := rs.Server.ListenTLS("tcp", fmt.Sprintf(":%d", rs.config.HTTPSPort))
 	if err != nil {
 		log.Error().Err(err).Str("route", rs.RouteName).Msg("Failed to listen on Tailscale TLS")
 		return fmt.Errorf("failed to listen on TLS for route %s: %w", rs.RouteName, err)
 	}
-	defer ln.Close()
+	defer lnHTTPS.Close()
 
-	log.Info().Str("route", rs.RouteName).Str("fqdn", rs.RouteName+"."+rs.config.TailscaleDomain).Int("port", rs.config.Port).Str("address", ln.Addr().String()).Msg("Tailscale HTTPS server listening for route")
+	log.Info().Str("route", rs.RouteName).Str("fqdn", rs.RouteName+"."+rs.config.TailscaleDomain).Int("http-port", rs.config.HTTPPort).Int("https-port", rs.config.HTTPSPort).Msg("Tailscale HTTPS server listening for route")
 	server := &http.Server{Handler: rs.echo}
 
 	// Start server in a goroutine so we can listen for context cancellation
-	serverErrChan := make(chan error, 1)
+	serverErrChan := make(chan error, 2)
 	go func() {
-		serverErrChan <- server.Serve(ln)
+		serverErrChan <- server.Serve(lnHTTP)
+	}()
+	go func() {
+		serverErrChan <- server.Serve(lnHTTPS)
 	}()
 
 	// Wait for either server error or context cancellation

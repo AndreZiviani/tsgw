@@ -68,7 +68,8 @@ func TestServer_Start(t *testing.T) {
 				Routes: map[string]string{
 					"app": "http://app.internal:8080",
 				},
-				Port:           443,
+				HTTPPort:       80,
+				HTTPSPort:      443,
 				SkipTLSVerify:  false,
 				RequestTimeout: 30 * time.Second,
 				OpenTelemetry: OpenTelemetryConfig{
@@ -86,7 +87,8 @@ func TestServer_Start(t *testing.T) {
 			config: &Config{
 				TsnetDir:       "/tmp/tsgw-test",
 				Routes:         map[string]string{},
-				Port:           443,
+				HTTPPort:       80,
+				HTTPSPort:      443,
 				SkipTLSVerify:  false,
 				RequestTimeout: 30 * time.Second,
 				OpenTelemetry: OpenTelemetryConfig{
@@ -152,7 +154,8 @@ func TestServer_StartRoute(t *testing.T) {
 			routeName:  "app",
 			backendURL: "http://app.internal:8080",
 			config: &Config{
-				Port:           443,
+				HTTPPort:       80,
+				HTTPSPort:      443,
 				SkipTLSVerify:  false,
 				RequestTimeout: 30 * time.Second,
 				OpenTelemetry: OpenTelemetryConfig{
@@ -166,7 +169,8 @@ func TestServer_StartRoute(t *testing.T) {
 			routeName:  "app",
 			backendURL: "http://[::1:80/", // Invalid IPv6 URL
 			config: &Config{
-				Port:           443,
+				HTTPPort:       80,
+				HTTPSPort:      443,
 				SkipTLSVerify:  false,
 				RequestTimeout: 30 * time.Second,
 				OpenTelemetry: OpenTelemetryConfig{

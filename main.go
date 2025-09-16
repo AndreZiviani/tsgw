@@ -52,7 +52,7 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 
 	log.Info().Msg("Starting TSGW (Tailscale Gateway)")
 
-	log.Info().Int("routes", len(config.Routes)).Str("hostname", config.Hostname).Str("domain", config.TailscaleDomain).Int("port", config.Port).Msg("Configuration loaded")
+	log.Info().Int("routes", len(config.Routes)).Str("hostname", config.Hostname).Str("domain", config.TailscaleDomain).Int("http-port", config.HTTPPort).Int("https-port", config.HTTPSPort).Msg("Configuration loaded")
 
 	// Create shared Tailscale client
 	tsClient, err := createTailscaleClient(ctx, config)

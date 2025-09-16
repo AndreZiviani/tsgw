@@ -14,7 +14,8 @@ type Config struct {
 	Hostname        string
 	OAuth           OAuthConfig
 	OpenTelemetry   OpenTelemetryConfig
-	Port            int
+	HTTPPort        int
+	HTTPSPort       int
 	LogLevel        string
 	LogFormat       string
 	SkipTLSVerify   bool
@@ -48,7 +49,8 @@ func buildConfigFromCLI(cmd *cli.Command) *Config {
 	config := &Config{
 		Hostname:        cmd.String("hostname"),
 		TailscaleDomain: cmd.String("tailscale-domain"),
-		Port:            cmd.Int("port"),
+		HTTPPort:        cmd.Int("http-port"),
+		HTTPSPort:       cmd.Int("https-port"),
 		LogLevel:        cmd.String("log-level"),
 		LogFormat:       cmd.String("log-format"),
 		SkipTLSVerify:   cmd.Bool("skip-tls-verify"),
