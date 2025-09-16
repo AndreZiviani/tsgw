@@ -194,7 +194,7 @@ export TSGW_OTEL_ENABLED="true"
 ### CLI Flags
 
 ```bash
-./tsgw --config config.yaml \
+./tsgw \
        --tailscale-domain "your-domain.ts.net" \
        --oauth-client-id "xxx" \
        --oauth-client-secret "xxx" \

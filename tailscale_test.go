@@ -24,7 +24,6 @@ func TestCreateTailscaleClient(t *testing.T) {
 					ClientID:     "test-client-id",
 					ClientSecret: "test-client-secret",
 				},
-				InitTimeout: 30 * time.Second,
 			},
 			expectError: false,
 		},
@@ -35,7 +34,6 @@ func TestCreateTailscaleClient(t *testing.T) {
 				OAuth: OAuthConfig{
 					ClientSecret: "test-client-secret",
 				},
-				InitTimeout: 30 * time.Second,
 			},
 			expectError: false, // Client creation might still succeed
 		},
@@ -80,7 +78,6 @@ func TestServer_Start(t *testing.T) {
 					ClientID:     "test-client-id",
 					ClientSecret: "test-client-secret",
 				},
-				InitTimeout: 30 * time.Second,
 			},
 			expectError: false,
 		},
@@ -99,7 +96,6 @@ func TestServer_Start(t *testing.T) {
 					ClientID:     "test-client-id",
 					ClientSecret: "test-client-secret",
 				},
-				InitTimeout: 30 * time.Second,
 			},
 			expectError: false, // Server can start with no routes, but won't serve anything
 		},

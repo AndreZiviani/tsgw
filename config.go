@@ -24,7 +24,6 @@ type Config struct {
 	Routes          map[string]string // name -> backend URL
 
 	// Timeouts and limits
-	InitTimeout    time.Duration
 	ConnectTimeout time.Duration
 	RequestTimeout time.Duration
 }
@@ -70,7 +69,6 @@ func buildConfigFromCLI(cmd *cli.Command) *Config {
 			Insecure:    cmd.Bool("otel-insecure"),
 		},
 
-		InitTimeout:    5 * time.Minute,  // 5 minutes for initialization
 		ConnectTimeout: 2 * time.Minute,  // 2 minutes for connection
 		RequestTimeout: 30 * time.Second, // 30 seconds for requests
 	}

@@ -72,10 +72,6 @@ func (s *server) startRoute(ctx context.Context, routeName, backendURL string) e
 
 // createTailscaleClient creates and returns a Tailscale API client
 func createTailscaleClient(ctx context.Context, config *Config) (*tailscale.Client, error) {
-	// Create context with initialization timeout
-	ctx, cancel := context.WithTimeout(ctx, config.InitTimeout)
-	defer cancel()
-
 	log.Info().Str("client_id", maskString(config.OAuth.ClientID)).Msg("Creating Tailscale API client for auth key management")
 
 	const tokenURLPath = "/api/v2/oauth/token"
