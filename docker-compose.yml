@@ -16,8 +16,6 @@ services:
       # - TSGW_OAUTH_CLIENT_ID=your-oauth-client-id
       # - TSGW_OAUTH_CLIENT_SECRET=your-oauth-client-secret
     volumes:
-      # Mount custom config file (optional)
-      - ./config.yaml:/app/config.yaml:ro
       # Mount Tailscale state directories (optional - for persistence)
       - ./tsnet-data:/app/tsnet-data
     restart: unless-stopped

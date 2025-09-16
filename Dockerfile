@@ -36,9 +36,6 @@ WORKDIR /app
 # Copy the binary from the builder stage
 COPY --from=builder /app/tsgw .
 
-# Copy the default configuration file
-COPY --from=builder /app/config.yaml .
-
 # Change ownership of the application files to the non-root user
 RUN chown -R tsgw:tsgw /app
 
