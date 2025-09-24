@@ -137,28 +137,10 @@ func (rp *RouteProxy) handler(c echo.Context) error {
 	// Replace request context
 	c.SetRequest(c.Request().WithContext(ctx))
 
-	// Store original request state
-	originalURL := c.Request().URL
-	originalHost := c.Request().Host
-
-	// Modify request for proxying using pre-parsed target URL
-	c.Request().URL.Scheme = rp.TargetURL.Scheme
-	c.Request().URL.Host = rp.TargetURL.Host
-	c.Request().Host = rp.TargetURL.Host
-
-	// Remove hop-by-hop headers
-	for _, h := range []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "TE", "Trailers", "Transfer-Encoding", "Upgrade"} {
-		c.Request().Header.Del(h)
-	}
-
 	log.Debug().Str("route", rp.RouteName).Str("backend", rp.BackendURL).Str("path", c.Request().URL.Path).Msg("Proxying request")
 
 	// Serve via pre-configured proxy
 	rp.Proxy.ServeHTTP(c.Response(), c.Request())
-
-	// Restore original request state (though this won't be reached after ServeHTTP)
-	c.Request().URL = originalURL
-	c.Request().Host = originalHost
 
 	return nil
 }
