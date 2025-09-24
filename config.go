@@ -11,6 +11,7 @@ import (
 )
 
 type Config struct {
+	TailscaleTag    string
 	OAuth           OAuthConfig
 	OpenTelemetry   OpenTelemetryConfig
 	HTTPPort        int
@@ -46,6 +47,7 @@ type OpenTelemetryConfig struct {
 // buildConfigFromCLI builds a Config struct directly from CLI flag values
 func buildConfigFromCLI(cmd *cli.Command) *Config {
 	config := &Config{
+		TailscaleTag:    cmd.String("tailscale-tag"),
 		TailscaleDomain: cmd.String("tailscale-domain"),
 		HTTPPort:        cmd.Int("http-port"),
 		HTTPSPort:       cmd.Int("https-port"),

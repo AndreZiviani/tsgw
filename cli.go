@@ -1,6 +1,11 @@
 package main
 
-import "github.com/urfave/cli/v3"
+import (
+	"context"
+	"strings"
+
+	"github.com/urfave/cli/v3"
+)
 
 func NewCLI(action cli.ActionFunc) *cli.Command {
 	cmd := &cli.Command{
@@ -9,6 +14,19 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 		Description: "Tailscale HTTPS Load Balancer - Routes requests based on Host header to configured backends",
 		Flags: []cli.Flag{
 			// Basic configuration
+			&cli.StringFlag{
+				Name:    "tailscale-tag",
+				Usage:   "Tailscale tag to assign to gateway nodes (must exist in Tailscale ACLs)",
+				Value:   "tsgw",
+				Sources: cli.EnvVars("TSGW_TAILSCALE_TAG"),
+				Action: func(ctx context.Context, cmd *cli.Command,value string) error {
+					if strings.HasPrefix(value, "tag:") {
+						return nil
+					}
+					// Prepend "tag:" if not already present
+					return cmd.Set("tailscale-tag", "tag:"+value)
+				},
+			},
 			&cli.StringFlag{
 				Name:     "tailscale-domain",
 				Usage:    "Tailscale network domain",

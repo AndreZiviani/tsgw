@@ -69,7 +69,7 @@ waitOnline:
 				break
 			}
 
-			key, err := createNewAuthKey(ctx, s.tsClient, routeName)
+			key, err := createNewAuthKey(ctx, s.tsClient, s.config.TailscaleTag, routeName)
 			if err != nil {
 				tsServer.Close()
 				return nil, err
@@ -104,7 +104,7 @@ waitOnline:
 }
 
 // createNewAuthKey creates a new auth key for the given hostname
-func createNewAuthKey(ctx context.Context, tsClient *tailscale.Client, routeName string) (string, error) {
+func createNewAuthKey(ctx context.Context, tsClient *tailscale.Client, tsTag string, routeName string) (string, error) {
 	log.Info().Str("route", routeName).Msg("Creating auth key programmatically")
 
 	caps := tailscale.KeyCapabilities{
@@ -124,7 +124,7 @@ func createNewAuthKey(ctx context.Context, tsClient *tailscale.Client, routeName
 			}{
 				Reusable:      false,
 				Preauthorized: true,
-				Tags:          []string{"tag:tsgw"}, // Tag for our gateway nodes
+				Tags:          []string{tsTag}, // Tag for our gateway nodes
 			},
 		},
 	}
