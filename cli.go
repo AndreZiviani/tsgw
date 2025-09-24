@@ -73,6 +73,30 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 				Usage:    "Route in format 'name=backend_url' (can be specified multiple times)",
 				Required: true,
 				Sources:  cli.EnvVars("TSGW_ROUTES"),
+				Action: func(ctx context.Context, cmd *cli.Command, values []string) error {
+					routes := make(map[string]string)
+					for _, v := range values {
+						parts := strings.SplitN(v, "=", 2)
+						if len(parts) != 2 {
+							return cli.Exit("Invalid route format, must be 'name=backend_url'", 1)
+						}
+						name := strings.TrimSpace(parts[0])
+						backend := strings.TrimSpace(parts[1])
+						
+						if _, exists := routes[name]; exists {
+							return cli.Exit("Duplicate route name: "+name, 1)
+						}
+
+						if !strings.HasPrefix(backend, "http://") && !strings.HasPrefix(backend, "https://") {
+							return cli.Exit("Backend URL must start with http:// or https:// for route: "+name, 1)
+						}
+						
+						// Convert route name to lowercase to ensure consistency
+						name = strings.ToLower(name)
+						routes[name] = backend
+					}
+					return nil
+				},
 			},
 
 			// Other options
