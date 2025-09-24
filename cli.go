@@ -10,12 +10,6 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 		Flags: []cli.Flag{
 			// Basic configuration
 			&cli.StringFlag{
-				Name:    "hostname",
-				Usage:   "Base hostname for Tailscale nodes",
-				Value:   "tsgw",
-				Sources: cli.EnvVars("TSGW_HOSTNAME"),
-			},
-			&cli.StringFlag{
 				Name:     "tailscale-domain",
 				Usage:    "Tailscale network domain",
 				Required: true,
