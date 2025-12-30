@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -19,6 +20,34 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 	"tailscale.com/tsnet"
 )
+
+type proxyBufferPool struct {
+	size int
+	pool sync.Pool
+}
+
+func newProxyBufferPool(size int) *proxyBufferPool {
+	bp := &proxyBufferPool{size: size}
+	bp.pool.New = func() any {
+		return make([]byte, size)
+	}
+	return bp
+}
+
+func (bp *proxyBufferPool) Get() []byte {
+	return bp.pool.Get().([]byte)
+}
+
+func (bp *proxyBufferPool) Put(b []byte) {
+	if bp == nil {
+		return
+	}
+	// Avoid retaining unusually large buffers.
+	if cap(b) < bp.size {
+		return
+	}
+	bp.pool.Put(b[:bp.size])
+}
 
 type RouteServer struct {
 	RouteName string
@@ -126,6 +155,17 @@ func (rs *RouteServer) newRouteProxy() (*RouteProxy, error) {
 	// Create reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Transport = rs.newProxyTransport(target)
+	proxy.BufferPool = newProxyBufferPool(32 * 1024)
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Warn().
+			Err(err).
+			Str("route", rs.RouteName).
+			Str("backend", target.String()).
+			Str("method", r.Method).
+			Str("path", r.URL.Path).
+			Msg("Proxy error")
+		http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
+	}
 
 	log.Debug().Str("route", rs.RouteName).Str("backend", target.String()).Bool("skip_tls_verify", rs.config.SkipTLSVerify).Msg("Configured proxy transport")
 
@@ -217,8 +257,15 @@ func (rs *RouteServer) Start(ctx context.Context) error {
 	}
 	defer lnHTTPS.Close()
 
-	log.Info().Str("route", rs.RouteName).Str("fqdn", rs.RouteName+"."+rs.config.TailscaleDomain).Int("http-port", rs.config.HTTPPort).Int("https-port", rs.config.HTTPSPort).Msg("Tailscale HTTPS server listening for route")
-	server := &http.Server{
+	log.Info().Str("route", rs.RouteName).Str("fqdn", rs.RouteName+"."+rs.config.TailscaleDomain).Int("http-port", rs.config.HTTPPort).Int("https-port", rs.config.HTTPSPort).Msg("Tailscale servers listening for route")
+
+	// Keep separate server instances per listener (avoid calling Serve twice on the same http.Server).
+	httpsServer := &http.Server{
+		Handler:           rs.echo,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+	httpServer := &http.Server{
 		Handler:           rs.echo,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
@@ -227,23 +274,55 @@ func (rs *RouteServer) Start(ctx context.Context) error {
 	// Start server in a goroutine so we can listen for context cancellation
 	serverErrChan := make(chan error, 2)
 	go func() {
-		serverErrChan <- server.Serve(lnHTTP)
+		serverErrChan <- httpServer.Serve(lnHTTP)
 	}()
 	go func() {
-		serverErrChan <- server.Serve(lnHTTPS)
+		serverErrChan <- httpsServer.Serve(lnHTTPS)
 	}()
 
-	// Wait for either server error or context cancellation
+	// Wait for either server error or context cancellation.
+	// IMPORTANT: use a bounded timeout for shutdown; long-lived connections (e.g. WebSockets/streams)
+	// can block Shutdown forever otherwise.
 	select {
 	case err := <-serverErrChan:
-		if err != nil && err != http.ErrServerClosed {
+		// If a listener stops unexpectedly while the context is still active, treat it as an error.
+		if err == http.ErrServerClosed {
+			if ctx.Err() != nil {
+				return nil
+			}
+			_ = httpServer.Close()
+			_ = httpsServer.Close()
+			return fmt.Errorf("route %s server stopped unexpectedly", rs.RouteName)
+		}
+		if err != nil {
 			log.Error().Err(err).Str("route", rs.RouteName).Msg("Failed to start Tailscale server")
+			_ = httpServer.Close()
+			_ = httpsServer.Close()
 			return fmt.Errorf("failed to start server for route %s: %w", rs.RouteName, err)
 		}
 	case <-ctx.Done():
-		log.Info().Str("route", rs.RouteName).Msg("Shutting down Tailscale server due to context cancellation")
-		if err := server.Shutdown(context.Background()); err != nil {
-			log.Error().Err(err).Str("route", rs.RouteName).Msg("Error shutting down Tailscale server")
+		log.Info().Str("route", rs.RouteName).Msg("Shutdown requested; stopping HTTP servers")
+
+		httpServer.SetKeepAlivesEnabled(false)
+		httpsServer.SetKeepAlivesEnabled(false)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			log.Warn().Err(err).Str("route", rs.RouteName).Msg("HTTP graceful shutdown timed out; forcing close")
+			_ = httpServer.Close()
+		}
+		if err := httpsServer.Shutdown(shutdownCtx); err != nil {
+			log.Warn().Err(err).Str("route", rs.RouteName).Msg("HTTPS graceful shutdown timed out; forcing close")
+			_ = httpsServer.Close()
+		}
+
+		// Drain both Serve goroutines to avoid leaks.
+		for i := 0; i < 2; i++ {
+			err := <-serverErrChan
+			if err != nil && err != http.ErrServerClosed {
+				log.Debug().Err(err).Str("route", rs.RouteName).Msg("Serve loop exited")
+			}
 		}
 	}
 

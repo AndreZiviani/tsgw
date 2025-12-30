@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -57,6 +58,24 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("failed to setup OpenTelemetry: %w", err)
 	}
 
+	// Always attempt to flush/stop telemetry on exit. Use a fresh timeout context so shutdown
+	// still works even when the main context is already canceled by a signal.
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if otel != nil {
+			if err := otel.Shutdown(shutdownCtx); err != nil {
+				log.Error().Err(err).Msg("Error shutting down OpenTelemetry")
+			}
+		}
+		if pyro != nil {
+			if err := pyro.Shutdown(shutdownCtx); err != nil {
+				log.Error().Err(err).Msg("Error shutting down Pyroscope")
+			}
+		}
+	}()
+
 	log.Info().Msg("Starting TSGW (Tailscale Gateway)")
 
 	log.Info().Int("routes", len(config.Routes)).Str("domain", config.TailscaleDomain).Int("http-port", config.HTTPPort).Int("https-port", config.HTTPSPort).Msg("Configuration loaded")
@@ -79,24 +98,9 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 	if err := server.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
-
-	// Wait for shutdown signal
-	<-ctx.Done()
-	log.Info().Msg("Shutdown signal received, initiating graceful shutdown...")
-
-	// Shutdown OpenTelemetry
-	if err := otel.Shutdown(ctx); err != nil {
-		log.Error().Err(err).Msg("Error shutting down OpenTelemetry")
+	if ctx.Err() != nil {
+		log.Info().Msg("Shutdown requested; exiting")
 	}
-
-	// Shutdown Pyroscope
-	if pyro != nil {
-		if err := pyro.Shutdown(ctx); err != nil {
-			log.Error().Err(err).Msg("Error shutting down Pyroscope")
-		}
-	}
-
-	log.Info().Msg("TSGW shutdown completed")
 	return nil
 }
 

@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -24,6 +26,12 @@ func (s *server) startTailscaleInstance(ctx context.Context, routeName string) (
 
 	// Use configurable tsnet directory with route-specific subdirectory
 	tsnetDir := filepath.Join(s.config.TsnetDir, routeName)
+	if s.config.ForceCleanup {
+		log.Warn().Str("route", routeName).Str("dir", tsnetDir).Msg("Force cleanup enabled; removing tsnet state directory")
+		if err := os.RemoveAll(tsnetDir); err != nil {
+			return nil, fmt.Errorf("failed to remove tsnet dir %s: %w", tsnetDir, err)
+		}
+	}
 
 	// Try to start without auth key first
 	tsServer := &tsnet.Server{
@@ -52,11 +60,14 @@ func (s *server) startTailscaleInstance(ctx context.Context, routeName string) (
 	}
 
 	loginDone := false
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 waitOnline:
 	for {
 		st, err := lc.StatusWithoutPeers(ctx)
 		if err != nil {
 			log.Warn().Err(err).Str("route", routeName).Msg("Failed to get status from local client")
+			tsServer.Close()
 			return nil, err
 		}
 
@@ -89,11 +100,18 @@ waitOnline:
 			}
 			loginDone = true
 		}
-		time.Sleep(time.Second)
+		select {
+		case <-ctx.Done():
+			tsServer.Close()
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
 	}
 
-	// Try to connect
-	_, connectErr := tsServer.Up(context.Background())
+	// Try to connect. Use ctx so shutdown can interrupt this.
+	upCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	_, connectErr := tsServer.Up(upCtx)
 	if connectErr != nil {
 		log.Warn().Err(connectErr).Str("route", routeName).Msg("Failed to connect")
 		tsServer.Close()
@@ -132,14 +150,16 @@ func createNewAuthKey(ctx context.Context, tsClient *tailscale.Client, tsTag str
 	// Sanitize description to only contain valid characters
 	description := fmt.Sprintf("Auth key for TSGW route: %s", routeName)
 	// Replace invalid characters with underscores, keep only alphanumeric, spaces, hyphens, and underscores
-	sanitizedDesc := ""
+	var b strings.Builder
+	b.Grow(len(description))
 	for _, r := range description {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == ' ' || r == '-' || r == '_' {
-			sanitizedDesc += string(r)
+			b.WriteRune(r)
 		} else {
-			sanitizedDesc += "_"
+			b.WriteByte('_')
 		}
 	}
+	sanitizedDesc := b.String()
 
 	request := tailscale.CreateKeyRequest{
 		Capabilities: caps,

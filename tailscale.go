@@ -56,6 +56,7 @@ func (s *server) startRoute(ctx context.Context, routeName, backendURL string) e
 	if err != nil {
 		return fmt.Errorf("failed to start Tailscale instance for %s: %w", routeName, err)
 	}
+	defer tsServer.Close()
 
 	// Get Tailscale IP addresses
 	ip4, ip6 := tsServer.TailscaleIPs()
