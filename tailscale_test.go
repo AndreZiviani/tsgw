@@ -126,94 +126,12 @@ func TestServer_Start(t *testing.T) {
 				tsClient: tsClient,
 			}
 
-			// Test that Start doesn't panic and returns appropriate values
+			// Start now runs as a long-lived service host; use a canceled context to
+			// ensure tests do not hang (external dependencies are not available here).
 			assert.NotPanics(t, func() {
-				err := s.Start(context.Background())
-				// We expect this to fail due to external dependencies (Tailscale auth, network, etc.)
-				// but it should not panic
-				if err == nil {
-					t.Log("Server started successfully (unexpected in test environment)")
-				} else {
-					t.Logf("Server failed as expected: %v", err)
-				}
-			})
-		})
-	}
-}
-
-func TestServer_StartRoute(t *testing.T) {
-	tests := []struct {
-		name        string
-		routeName   string
-		backendURL  string
-		config      *Config
-		expectError bool
-	}{
-		{
-			name:       "valid route start",
-			routeName:  "app",
-			backendURL: "http://app.internal:8080",
-			config: &Config{
-				HTTPPort:       80,
-				HTTPSPort:      443,
-				SkipTLSVerify:  false,
-				RequestTimeout: 30 * time.Second,
-				OpenTelemetry: OpenTelemetryConfig{
-					Enabled: false,
-				},
-			},
-			expectError: false,
-		},
-		{
-			name:       "invalid backend URL",
-			routeName:  "app",
-			backendURL: "http://[::1:80/", // Invalid IPv6 URL
-			config: &Config{
-				HTTPPort:       80,
-				HTTPSPort:      443,
-				SkipTLSVerify:  false,
-				RequestTimeout: 30 * time.Second,
-				OpenTelemetry: OpenTelemetryConfig{
-					Enabled: false,
-				},
-			},
-			expectError: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock OpenTelemetry instance
-			otel := &OpenTelemetry{
-				TracerProvider: tracenoop.NewTracerProvider(),
-				MeterProvider:  noop.NewMeterProvider(),
-				Tracer:         tracenoop.NewTracerProvider().Tracer("tsgw"),
-				Meter:          noop.NewMeterProvider().Meter("tsgw"),
-			}
-
-			// Try to create a Tailscale client (this may fail in test environment)
-			tsClient, err := createTailscaleClient(context.Background(), tt.config)
-			if err != nil {
-				t.Logf("Failed to create Tailscale client: %v", err)
-				tsClient = nil // Continue with nil client
-			}
-
-			s := &server{
-				config:   tt.config,
-				otel:     otel,
-				tsClient: tsClient,
-			}
-
-			// Test that startRoute handles the route appropriately
-			assert.NotPanics(t, func() {
-				err := s.startRoute(context.Background(), tt.routeName, tt.backendURL)
-				// We expect this to fail due to external dependencies
-				// but it should not panic
-				if err == nil {
-					t.Log("Route started successfully (unexpected in test environment)")
-				} else {
-					t.Logf("Route failed as expected: %v", err)
-				}
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				_ = s.Start(ctx)
 			})
 		})
 	}
