@@ -71,8 +71,8 @@ func buildConfigFromCLI(cmd *cli.Command) *Config {
 			Insecure:    cmd.Bool("otel-insecure"),
 		},
 
-		ConnectTimeout: 2 * time.Minute,  // 2 minutes for connection
-		RequestTimeout: 30 * time.Second, // 30 seconds for requests
+		ConnectTimeout: cmd.Duration("connect-timeout"),
+		RequestTimeout: cmd.Duration("request-timeout"),
 	}
 
 	// Parse routes from CLI flags and environment variables

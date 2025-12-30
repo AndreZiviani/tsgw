@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v3"
 )
@@ -19,7 +20,7 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 				Usage:   "Tailscale tag to assign to gateway nodes (must exist in Tailscale ACLs)",
 				Value:   "tsgw",
 				Sources: cli.EnvVars("TSGW_TAILSCALE_TAG"),
-				Action: func(ctx context.Context, cmd *cli.Command,value string) error {
+				Action: func(ctx context.Context, cmd *cli.Command, value string) error {
 					if strings.HasPrefix(value, "tag:") {
 						return nil
 					}
@@ -82,7 +83,7 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 						}
 						name := strings.TrimSpace(parts[0])
 						backend := strings.TrimSpace(parts[1])
-						
+
 						if _, exists := routes[name]; exists {
 							return cli.Exit("Duplicate route name: "+name, 1)
 						}
@@ -90,7 +91,7 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 						if !strings.HasPrefix(backend, "http://") && !strings.HasPrefix(backend, "https://") {
 							return cli.Exit("Backend URL must start with http:// or https:// for route: "+name, 1)
 						}
-						
+
 						// Convert route name to lowercase to ensure consistency
 						name = strings.ToLower(name)
 						routes[name] = backend
@@ -127,6 +128,20 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 				Name:    "force-cleanup",
 				Usage:   "Force cleanup of existing Tailscale state files before starting",
 				Sources: cli.EnvVars("TSGW_FORCE_CLEANUP"),
+			},
+
+			// Timeouts
+			&cli.DurationFlag{
+				Name:    "connect-timeout",
+				Usage:   "Timeout for establishing backend connections (dial)",
+				Value:   30 * time.Second,
+				Sources: cli.EnvVars("TSGW_CONNECT_TIMEOUT"),
+			},
+			&cli.DurationFlag{
+				Name:    "request-timeout",
+				Usage:   "Per-request timeout for proxying (0 disables; recommended for long-lived streams like Plex)",
+				Value:   30 * time.Second,
+				Sources: cli.EnvVars("TSGW_REQUEST_TIMEOUT"),
 			},
 
 			// OpenTelemetry options

@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -63,7 +65,7 @@ func (rs *RouteServer) initEcho() error {
 
 	// Configure lecho logger with zerolog
 	lechoLogger := lecho.From(log.Logger)
-	lechoLogger.SetLevel(gommon.INFO)
+	lechoLogger.SetLevel(gommonLevelFromString(rs.config.LogLevel))
 
 	// Set lecho as the logger for Echo
 	e.Logger = lechoLogger
@@ -97,6 +99,21 @@ func (rs *RouteServer) initEcho() error {
 	return nil
 }
 
+func gommonLevelFromString(level string) gommon.Lvl {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "trace", "debug":
+		return gommon.DEBUG
+	case "info", "":
+		return gommon.INFO
+	case "warn", "warning":
+		return gommon.WARN
+	case "error", "fatal", "panic":
+		return gommon.ERROR
+	default:
+		return gommon.INFO
+	}
+}
+
 // newRouteProxy creates a pre-configured proxy for a route during initialization
 func (rs *RouteServer) newRouteProxy() (*RouteProxy, error) {
 	// Parse backend URL once during initialization
@@ -108,16 +125,9 @@ func (rs *RouteServer) newRouteProxy() (*RouteProxy, error) {
 
 	// Create reverse proxy
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = rs.newProxyTransport(target)
 
-	// Configure transport for HTTPS backends once during initialization
-	if target.Scheme == "https" {
-		proxy.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: rs.config.SkipTLSVerify,
-			},
-		}
-		log.Debug().Str("route", rs.RouteName).Str("backend", target.String()).Bool("skip_tls_verify", rs.config.SkipTLSVerify).Msg("Configured HTTPS proxy")
-	}
+	log.Debug().Str("route", rs.RouteName).Str("backend", target.String()).Bool("skip_tls_verify", rs.config.SkipTLSVerify).Msg("Configured proxy transport")
 
 	return &RouteProxy{
 		Proxy:          proxy,
@@ -128,14 +138,61 @@ func (rs *RouteServer) newRouteProxy() (*RouteProxy, error) {
 	}, nil
 }
 
+func (rs *RouteServer) newProxyTransport(target *url.URL) http.RoundTripper {
+	// Clone the default transport so we keep sane defaults (proxy env vars, HTTP/2,
+	// dialer behavior, etc) while tuning pooling for reverse-proxy workloads.
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return http.DefaultTransport
+	}
+
+	tr := base.Clone()
+
+	// Connection pooling: the Go defaults are conservative (MaxIdleConnsPerHost=2),
+	// which can cause connection churn and TLS handshakes under load.
+	tr.MaxIdleConns = 256
+	tr.MaxIdleConnsPerHost = 64
+	tr.IdleConnTimeout = 90 * time.Second
+
+	// Good general-purpose timeouts for proxying.
+	tr.TLSHandshakeTimeout = 10 * time.Second
+	tr.ExpectContinueTimeout = 1 * time.Second
+	tr.ResponseHeaderTimeout = 30 * time.Second
+	tr.ForceAttemptHTTP2 = true
+
+	// Use an explicit dialer (still compatible with connection pooling).
+	dialTimeout := 30 * time.Second
+	if rs.config != nil && rs.config.ConnectTimeout > 0 {
+		dialTimeout = rs.config.ConnectTimeout
+	}
+	tr.DialContext = (&net.Dialer{
+		Timeout:   dialTimeout,
+		KeepAlive: 30 * time.Second,
+	}).DialContext
+
+	if target != nil && target.Scheme == "https" {
+		// Clone any existing TLS config rather than mutating shared pointers.
+		var tlsCfg *tls.Config
+		if tr.TLSClientConfig != nil {
+			tlsCfg = tr.TLSClientConfig.Clone()
+		} else {
+			tlsCfg = &tls.Config{}
+		}
+		tlsCfg.InsecureSkipVerify = rs.config.SkipTLSVerify
+		tr.TLSClientConfig = tlsCfg
+	}
+
+	return tr
+}
+
 // handler serves a proxy request using a pre-configured proxy
 func (rp *RouteProxy) handler(c echo.Context) error {
-	// Create context with timeout for the request
-	ctx, cancel := context.WithTimeout(c.Request().Context(), rp.RequestTimeout)
-	defer cancel()
-
-	// Replace request context
-	c.SetRequest(c.Request().WithContext(ctx))
+	// Optional request timeout (0 disables; recommended for long-lived streams).
+	if rp.RequestTimeout > 0 {
+		ctx, cancel := context.WithTimeout(c.Request().Context(), rp.RequestTimeout)
+		defer cancel()
+		c.SetRequest(c.Request().WithContext(ctx))
+	}
 
 	log.Debug().Str("route", rp.RouteName).Str("backend", rp.BackendURL).Str("path", c.Request().URL.Path).Msg("Proxying request")
 
@@ -161,7 +218,11 @@ func (rs *RouteServer) Start(ctx context.Context) error {
 	defer lnHTTPS.Close()
 
 	log.Info().Str("route", rs.RouteName).Str("fqdn", rs.RouteName+"."+rs.config.TailscaleDomain).Int("http-port", rs.config.HTTPPort).Int("https-port", rs.config.HTTPSPort).Msg("Tailscale HTTPS server listening for route")
-	server := &http.Server{Handler: rs.echo}
+	server := &http.Server{
+		Handler:           rs.echo,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
 
 	// Start server in a goroutine so we can listen for context cancellation
 	serverErrChan := make(chan error, 2)
