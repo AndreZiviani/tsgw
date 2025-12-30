@@ -1,6 +1,13 @@
 version: '3.8'
 
 services:
+  pyroscope:
+    image: grafana/pyroscope:latest
+    container_name: pyroscope
+    ports:
+      - "4040:4040"
+    restart: unless-stopped
+
   tsgw:
     build:
       context: .
@@ -11,6 +18,10 @@ services:
     environment:
       # Override configuration via environment variables
       - TSGW_LOG_LEVEL=info
+      # Optional: push profiles to the local Pyroscope instance
+      - TSGW_PYROSCOPE_ENABLED=false
+      - TSGW_PYROSCOPE_SERVER_ADDRESS=http://pyroscope:4040
+      - TSGW_PYROSCOPE_APPLICATION_NAME=tsgw
       # Add your Tailscale configuration here:
       # - TSGW_TAILSCALE_DOMAIN=your-domain.ts.net
       # - TSGW_OAUTH_CLIENT_ID=your-oauth-client-id
@@ -27,7 +38,7 @@ services:
       - /tmp
     # Health check
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:443/", "||", "exit", "1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

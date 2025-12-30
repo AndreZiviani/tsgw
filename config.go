@@ -14,6 +14,7 @@ type Config struct {
 	TailscaleTag    string
 	OAuth           OAuthConfig
 	OpenTelemetry   OpenTelemetryConfig
+	Pyroscope       PyroscopeConfig
 	HTTPPort        int
 	HTTPSPort       int
 	LogLevel        string
@@ -44,6 +45,21 @@ type OpenTelemetryConfig struct {
 	Headers     map[string]string // Additional headers for OTLP requests
 }
 
+type PyroscopeConfig struct {
+	Enabled         bool
+	ServerAddress   string // e.g. http://pyroscope:4040
+	ApplicationName string // e.g. tsgw
+	AuthToken       string // Deprecated upstream, but still supported
+	BasicAuthUser   string
+	BasicAuthPass   string
+	TenantID        string
+	Tags            map[string]string // key -> value
+	ProfileTypes    []string          // e.g. cpu, alloc_objects, inuse_space
+	UploadRate      time.Duration
+	DisableGCRuns   bool
+	HTTPHeaders     map[string]string // key -> value
+}
+
 // buildConfigFromCLI builds a Config struct directly from CLI flag values
 func buildConfigFromCLI(cmd *cli.Command) *Config {
 	config := &Config{
@@ -71,9 +87,53 @@ func buildConfigFromCLI(cmd *cli.Command) *Config {
 			Insecure:    cmd.Bool("otel-insecure"),
 		},
 
+		Pyroscope: PyroscopeConfig{
+			Enabled:         cmd.Bool("pyroscope-enabled"),
+			ServerAddress:   cmd.String("pyroscope-server-address"),
+			ApplicationName: cmd.String("pyroscope-application-name"),
+			AuthToken:       cmd.String("pyroscope-auth-token"),
+			BasicAuthUser:   cmd.String("pyroscope-basic-auth-user"),
+			BasicAuthPass:   cmd.String("pyroscope-basic-auth-pass"),
+			TenantID:        cmd.String("pyroscope-tenant-id"),
+			UploadRate:      cmd.Duration("pyroscope-upload-rate"),
+			DisableGCRuns:   cmd.Bool("pyroscope-disable-gc-runs"),
+		},
+
 		ConnectTimeout: cmd.Duration("connect-timeout"),
 		RequestTimeout: cmd.Duration("request-timeout"),
 	}
+
+	// Parse Pyroscope tags
+	config.Pyroscope.Tags = make(map[string]string)
+	for _, tag := range cmd.StringSlice("pyroscope-tag") {
+		parts := strings.SplitN(tag, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+		if k == "" {
+			continue
+		}
+		config.Pyroscope.Tags[k] = v
+	}
+
+	// Parse Pyroscope headers
+	config.Pyroscope.HTTPHeaders = make(map[string]string)
+	for _, hdr := range cmd.StringSlice("pyroscope-header") {
+		parts := strings.SplitN(hdr, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+		if k == "" {
+			continue
+		}
+		config.Pyroscope.HTTPHeaders[k] = v
+	}
+
+	config.Pyroscope.ProfileTypes = append([]string{}, cmd.StringSlice("pyroscope-profile-type")...)
 
 	// Parse routes from CLI flags and environment variables
 	routeFlags := cmd.StringSlice("route")

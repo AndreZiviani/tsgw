@@ -172,6 +172,70 @@ func NewCLI(action cli.ActionFunc) *cli.Command {
 				Usage:   "Skip TLS verification for OTLP endpoint",
 				Sources: cli.EnvVars("TSGW_OTEL_INSECURE"),
 			},
+
+			// Pyroscope continuous profiling (optional)
+			&cli.BoolFlag{
+				Name:    "pyroscope-enabled",
+				Usage:   "Enable Pyroscope continuous profiling (push mode)",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_ENABLED"),
+			},
+			&cli.StringFlag{
+				Name:    "pyroscope-server-address",
+				Usage:   "Pyroscope server address (e.g., http://pyroscope:4040)",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_SERVER_ADDRESS"),
+			},
+			&cli.StringFlag{
+				Name:    "pyroscope-application-name",
+				Usage:   "Pyroscope application name",
+				Value:   "tsgw",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_APPLICATION_NAME"),
+			},
+			&cli.StringFlag{
+				Name:    "pyroscope-auth-token",
+				Usage:   "Pyroscope auth token (deprecated upstream; prefer basic auth)",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_AUTH_TOKEN"),
+			},
+			&cli.StringFlag{
+				Name:    "pyroscope-basic-auth-user",
+				Usage:   "Pyroscope basic auth user",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_BASIC_AUTH_USER"),
+			},
+			&cli.StringFlag{
+				Name:    "pyroscope-basic-auth-pass",
+				Usage:   "Pyroscope basic auth password",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_BASIC_AUTH_PASS"),
+			},
+			&cli.StringFlag{
+				Name:    "pyroscope-tenant-id",
+				Usage:   "Pyroscope tenant ID (multi-tenancy)",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_TENANT_ID"),
+			},
+			&cli.DurationFlag{
+				Name:    "pyroscope-upload-rate",
+				Usage:   "Pyroscope upload rate (0 uses client default)",
+				Value:   0,
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_UPLOAD_RATE"),
+			},
+			&cli.BoolFlag{
+				Name:    "pyroscope-disable-gc-runs",
+				Usage:   "Disable automatic runtime.GC between heap profiles",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_DISABLE_GC_RUNS"),
+			},
+			&cli.StringSliceFlag{
+				Name:    "pyroscope-profile-type",
+				Usage:   "Pyroscope profile types (repeatable): cpu, alloc_objects, alloc_space, inuse_objects, inuse_space, goroutines, mutex_count, mutex_duration, block_count, block_duration",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_PROFILE_TYPES"),
+			},
+			&cli.StringSliceFlag{
+				Name:    "pyroscope-tag",
+				Usage:   "Pyroscope tag in format 'key=value' (repeatable)",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_TAGS"),
+			},
+			&cli.StringSliceFlag{
+				Name:    "pyroscope-header",
+				Usage:   "Additional Pyroscope HTTP header in format 'Key=Value' (repeatable)",
+				Sources: cli.EnvVars("TSGW_PYROSCOPE_HEADERS"),
+			},
 		},
 		Action: action,
 	}

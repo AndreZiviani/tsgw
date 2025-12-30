@@ -137,6 +137,22 @@ export TSGW_OTEL_SERVICE_NAME="tsgw"
 export TSGW_OTEL_ENDPOINT="localhost:4317"
 export TSGW_OTEL_PROTOCOL="grpc"
 export TSGW_OTEL_INSECURE="false"
+
+# Pyroscope (optional)
+export TSGW_PYROSCOPE_ENABLED="false"
+export TSGW_PYROSCOPE_SERVER_ADDRESS="http://pyroscope:4040"
+export TSGW_PYROSCOPE_APPLICATION_NAME="tsgw"
+# Auth options (pick one)
+export TSGW_PYROSCOPE_BASIC_AUTH_USER=""
+export TSGW_PYROSCOPE_BASIC_AUTH_PASS=""
+export TSGW_PYROSCOPE_AUTH_TOKEN=""
+# Optional
+export TSGW_PYROSCOPE_TENANT_ID=""
+export TSGW_PYROSCOPE_PROFILE_TYPES="cpu,alloc_objects,alloc_space,inuse_objects,inuse_space"
+export TSGW_PYROSCOPE_TAGS="env=prod,region=us-east-2"
+export TSGW_PYROSCOPE_HEADERS="X-Scope-OrgID=tenant-a"
+export TSGW_PYROSCOPE_UPLOAD_RATE="15s"
+export TSGW_PYROSCOPE_DISABLE_GC_RUNS="false"
 ```
 
 ### CLI Flags

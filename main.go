@@ -16,6 +16,7 @@ import (
 type server struct {
 	config   *Config
 	otel     *OpenTelemetry
+	pyro     *Pyroscope
 	tsClient *tailscale.Client
 }
 
@@ -44,6 +45,12 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 	// Setup logging from loaded configuration (may change format from default)
 	SetupLogging(config)
 
+	// Setup Pyroscope continuous profiling (optional)
+	pyro, err := SetupPyroscope(ctx, config)
+	if err != nil {
+		return fmt.Errorf("failed to setup Pyroscope: %w", err)
+	}
+
 	// Setup OpenTelemetry
 	otel, err := SetupOpenTelemetry(ctx, config)
 	if err != nil {
@@ -63,6 +70,7 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 	server := &server{
 		config:   config,
 		otel:     otel,
+		pyro:     pyro,
 		tsClient: tsClient,
 	}
 
@@ -79,6 +87,13 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 	// Shutdown OpenTelemetry
 	if err := otel.Shutdown(ctx); err != nil {
 		log.Error().Err(err).Msg("Error shutting down OpenTelemetry")
+	}
+
+	// Shutdown Pyroscope
+	if pyro != nil {
+		if err := pyro.Shutdown(ctx); err != nil {
+			log.Error().Err(err).Msg("Error shutting down Pyroscope")
+		}
 	}
 
 	log.Info().Msg("TSGW shutdown completed")

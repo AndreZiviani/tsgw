@@ -24,8 +24,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o tsgw .
 # Stage 2: Create the runtime image
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS requests
-RUN apk --no-cache add ca-certificates
+# Install ca-certificates for HTTPS requests and wget for Docker healthchecks
+RUN apk --no-cache add ca-certificates wget
 
 # Create a non-root user for security
 RUN addgroup -S tsgw && adduser -S tsgw -G tsgw

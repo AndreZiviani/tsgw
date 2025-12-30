@@ -41,3 +41,6 @@ Thumbs.db
 
 tsnet/
 creds
+
+# Local Tailscale state (do not commit)
+app/
