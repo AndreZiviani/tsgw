@@ -9,7 +9,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	"tailscale.com/ipn"
 	"tailscale.com/tsnet"
 )
 
@@ -36,76 +35,34 @@ func (s *server) startTailscaleServiceHost(ctx context.Context) (*tsnet.Server, 
 		log.Trace().Msgf(format, args...)
 	}
 
-	if err := tsServer.Start(); err != nil {
-		log.Warn().Err(err).Msg("Failed to start with existing state")
-		return nil, err
+	// Best-effort: try to create an auth key for automatic registration. If
+	// this fails, continue and let tsnet handle interactive login or use any
+	// existing state.
+	// Reuse a single in-memory auth key for all services started in this
+	// process. Create it once (best-effort) and keep it on `s.tsAuthKey`.
+	if s.tsAuthKey == "" {
+		if key, err := createNewAuthKey(ctx, s.tsClient, s.config.TailscaleTag, "tsgw"); err == nil {
+			s.tsAuthKey = key
+			tsServer.AuthKey = key
+			log.Info().Msg("Using freshly created Tailscale auth key")
+		} else {
+			log.Debug().Err(err).Msg("could not create auth key; will rely on tsnet interactive login or existing state")
+		}
+	} else {
+		tsServer.AuthKey = s.tsAuthKey
 	}
 
-	log.Debug().Str("host", "tsgw").Msg("Successfully started Tailscale server with existing state")
-	lc, err := tsServer.LocalClient()
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to create local client")
-		tsServer.Close()
-		return nil, err
-	}
-
-	loginDone := false
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-waitOnline:
-	for {
-		st, err := lc.StatusWithoutPeers(ctx)
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to get status from local client")
-			tsServer.Close()
-			return nil, err
-		}
-
-		switch st.BackendState {
-		case "Running":
-			log.Debug().Msg("Tailscale server is already running")
-			break waitOnline
-		case "NeedsLogin":
-			if loginDone {
-				break
-			}
-
-			key, err := createNewAuthKey(ctx, s.tsClient, s.config.TailscaleTag, "tsgw")
-			if err != nil {
-				tsServer.Close()
-				return nil, err
-			}
-
-			log.Info().Msg("Logging in with new auth key")
-			if err := lc.Start(ctx, ipn.Options{AuthKey: key}); err != nil {
-				log.Warn().Err(err).Msg("Failed to authenticate with new auth key")
-				tsServer.Close()
-				return nil, err
-			}
-
-			if err := lc.StartLoginInteractive(ctx); err != nil {
-				log.Warn().Err(err).Msg("Failed to start interactive login")
-				tsServer.Close()
-				return nil, err
-			}
-			loginDone = true
-		}
-		select {
-		case <-ctx.Done():
-			tsServer.Close()
-			return nil, ctx.Err()
-		case <-ticker.C:
-		}
-	}
-
+	// Let tsnet start and wait until the backend is Running. tsnet.Up takes
+	// care of starting the local backend, handling auth keys and interactive
+	// login when needed, and returns the status including Tailscale IPs.
 	upCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	_, connectErr := tsServer.Up(upCtx)
-	if connectErr != nil {
-		log.Warn().Err(connectErr).Msg("Failed to connect")
+	if _, err := tsServer.Up(upCtx); err != nil {
+		log.Warn().Err(err).Msg("Failed to bring tsnet server up")
 		tsServer.Close()
-		return nil, connectErr
+		return nil, err
 	}
 
+	log.Debug().Msg("Tailscale server is up and running")
 	return tsServer, nil
 }
