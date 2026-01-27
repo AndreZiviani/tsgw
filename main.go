@@ -19,6 +19,8 @@ type server struct {
 	otel     *OpenTelemetry
 	pyro     *Pyroscope
 	tsClient *tailscale.Client
+	// in-memory Tailscale auth key reused for all services in this process
+	tsAuthKey string
 }
 
 func main() {

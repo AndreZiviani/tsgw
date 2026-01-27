@@ -27,7 +27,9 @@ func createNewAuthKey(ctx context.Context, tsClient *tailscale.Client, tsTag str
 				Tags          []string `json:"tags"`
 				Preauthorized bool     `json:"preauthorized"`
 			}{
-				Reusable:      false,
+				// Make the key reusable so it can be used across services in this
+				// process without creating multiple single-use keys.
+				Reusable:      true,
 				Preauthorized: true,
 				Tags:          []string{tsTag},
 			},
