@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for TSGW (Tailscale Gateway)
 # Stage 1: Build the Go application
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install git and ca-certificates (needed for Go modules and HTTPS requests)
 RUN apk add --no-cache git ca-certificates

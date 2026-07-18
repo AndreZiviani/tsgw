@@ -19,6 +19,8 @@ type server struct {
 	otel     *OpenTelemetry
 	pyro     *Pyroscope
 	tsClient *tailscale.Client
+	// in-memory Tailscale auth key reused for all services in this process
+	tsAuthKey string
 }
 
 func main() {
@@ -106,7 +108,6 @@ func runServer(ctx context.Context, cmd *cli.Command) error {
 
 func (s *server) LogRoutes() {
 	for routeName, backendURL := range s.config.Routes {
-		fqdn := routeName + "." + s.config.TailscaleDomain
-		log.Info().Str("route", routeName).Str("backend", backendURL).Str("fqdn", fqdn).Msg("Configured route")
+		log.Info().Str("service", "svc:"+routeName).Str("backend", backendURL).Msg("Configured route")
 	}
 }
