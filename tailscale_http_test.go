@@ -176,6 +176,44 @@ func TestRouteServer_NewRouteProxy(t *testing.T) {
 	}
 }
 
+func TestRouteServer_NewProxyTransport_ResponseHeaderTimeout(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestTimeout time.Duration
+		wantHeaderTO   time.Duration
+	}{
+		{
+			name:           "request-timeout=0 disables ResponseHeaderTimeout",
+			requestTimeout: 0,
+			wantHeaderTO:   0,
+		},
+		{
+			name:           "custom request-timeout is honored",
+			requestTimeout: 5 * time.Minute,
+			wantHeaderTO:   5 * time.Minute,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs := &RouteServer{
+				RouteName: "test",
+				config: &Config{
+					RequestTimeout: tt.requestTimeout,
+				},
+			}
+
+			target, err := url.Parse("http://app.internal:8080")
+			assert.NoError(t, err)
+
+			rt := rs.newProxyTransport(target)
+			tr, ok := rt.(*http.Transport)
+			assert.True(t, ok, "expected *http.Transport")
+			assert.Equal(t, tt.wantHeaderTO, tr.ResponseHeaderTimeout)
+		})
+	}
+}
+
 func TestRouteServer_InitEcho(t *testing.T) {
 	t.Run("successful echo initialization", func(t *testing.T) {
 		rs := &RouteServer{

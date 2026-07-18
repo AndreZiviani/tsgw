@@ -197,8 +197,16 @@ func (rs *RouteServer) newProxyTransport(target *url.URL) http.RoundTripper {
 	// Good general-purpose timeouts for proxying.
 	tr.TLSHandshakeTimeout = 10 * time.Second
 	tr.ExpectContinueTimeout = 1 * time.Second
-	tr.ResponseHeaderTimeout = 30 * time.Second
 	tr.ForceAttemptHTTP2 = true
+
+	// How long to wait for the backend's response headers. This must honor the
+	// same contract as --request-timeout (0 disables), otherwise a slow backend
+	// trips this transport timeout and ReverseProxy returns 502 even when the
+	// per-request timeout is disabled (e.g. long-lived streams like Plex).
+	tr.ResponseHeaderTimeout = 30 * time.Second
+	if rs.config != nil {
+		tr.ResponseHeaderTimeout = rs.config.RequestTimeout
+	}
 
 	// Use an explicit dialer (still compatible with connection pooling).
 	dialTimeout := 30 * time.Second
